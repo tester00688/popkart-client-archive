@@ -53,11 +53,34 @@ const run = async () => {
       consola.log('TXF URL:', txf.url)
       patchFileList = await txf.load()
     } else {
-      remoteBaseUrl = resolveUrl(patchInfo.version.toString(), patchInfo.endpoint)
-      const nfo2 = new KartNfo2(remoteBaseUrl)
-      consola.log('NFO2 URL:', nfo2.url)
+  const nfoCandidates = [
+    resolveUrl(patchInfo.version.toString(), patchInfo.endpoint),
+    patchInfo.endpoint,
+  ]
+
+  let lastError: unknown
+
+  for (const baseUrl of nfoCandidates) {
+    try {
+      const nfo2 = new KartNfo2(baseUrl)
+      consola.log('Trying NFO2 URL:', nfo2.url)
       patchFileList = await nfo2.load()
+      remoteBaseUrl = baseUrl
+      consola.success(`NFO2 loaded from: ${nfo2.url}`)
+      break
+    } catch (e) {
+      lastError = e
+      consola.warn(`Failed to load NFO2 from: ${baseUrl}`)
+      consola.warn(e)
     }
+  }
+
+  if (!remoteBaseUrl || patchFileList.length === 0) {
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError))
+  }
+}
     const rootDir = process.cwd()
     const clientDir = resolve(rootDir, 'client')
     const tempDir = resolve(clientDir, 'temp')
