@@ -1,0 +1,64 @@
+name: Diagnose patch endpoint
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_secret:
+        description: 'true = test PATCH_SERVER_ENDPOINT, false = test fallback socket'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.9.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm i
+
+      - name: Decide test mode
+        shell: pwsh
+        env:
+          SECRET_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
+          USE_SECRET: ${{ inputs.use_secret }}
+        run: |
+          if ($env:USE_SECRET -eq 'true') {
+            if ([string]::IsNullOrWhiteSpace($env:SECRET_ENDPOINT)) {
+              throw "PATCH_SERVER_ENDPOINT secret is missing or empty."
+            }
+            Write-Host "MODE=SECRET"
+            Write-Host "SECRET_STATUS=PRESENT"
+          } else {
+            Write-Host "MODE=FALLBACK_SOCKET"
+            Write-Host "SECRET_STATUS=IGNORED"
+          }
+
+      - name: Check patch info using secret
+        if: ${{ inputs.use_secret == 'true' }}
+        env:
+          PATCH_SERVER_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
+        run: pnpm start-check
+
+      - name: Check patch info using fallback socket
+        if: ${{ inputs.use_secret == 'false' }}
+        env:
+          PATCH_SERVER_ENDPOINT: ''
+        run: pnpm start-check
