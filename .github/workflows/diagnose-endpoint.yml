@@ -11,54 +11,49 @@ on:
         options:
           - 'true'
           - 'false'
+      manual_endpoint:
+        description: 'optional TCG patch server endpoint'
+        required: false
+        default: ''
 
 jobs:
   diagnose:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 9.9.0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18.x
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm i
+      - run: pnpm i
 
-      - name: Decide test mode
+      - name: Check patch info
         shell: pwsh
         env:
-          SECRET_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
           USE_SECRET: ${{ inputs.use_secret }}
+          SECRET_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
+          MANUAL_ENDPOINT: ${{ inputs.manual_endpoint }}
         run: |
           if ($env:USE_SECRET -eq 'true') {
-            if ([string]::IsNullOrWhiteSpace($env:SECRET_ENDPOINT)) {
-              throw "PATCH_SERVER_ENDPOINT secret is missing or empty."
+            if (-not [string]::IsNullOrWhiteSpace($env:MANUAL_ENDPOINT)) {
+              $env:PATCH_SERVER_ENDPOINT = $env:MANUAL_ENDPOINT
+              Write-Host "MODE=MANUAL_TCG_ENDPOINT"
+            } elseif (-not [string]::IsNullOrWhiteSpace($env:SECRET_ENDPOINT)) {
+              $env:PATCH_SERVER_ENDPOINT = $env:SECRET_ENDPOINT
+              Write-Host "MODE=SECRET"
+            } else {
+              throw "No PATCH_SERVER_ENDPOINT provided."
             }
-            Write-Host "MODE=SECRET"
-            Write-Host "SECRET_STATUS=PRESENT"
           } else {
+            $env:PATCH_SERVER_ENDPOINT = ''
             Write-Host "MODE=FALLBACK_SOCKET"
-            Write-Host "SECRET_STATUS=IGNORED"
           }
 
-      - name: Check patch info using secret
-        if: ${{ inputs.use_secret == 'true' }}
-        env:
-          PATCH_SERVER_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
-        run: pnpm start-check
-
-      - name: Check patch info using fallback socket
-        if: ${{ inputs.use_secret == 'false' }}
-        env:
-          PATCH_SERVER_ENDPOINT: ''
-        run: pnpm start-check
+          pnpm start-check
