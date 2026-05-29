@@ -47,15 +47,15 @@ jobs:
         env:
           PATCH_SERVER_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
 
-      - name: Restore cached client files
+      # Restore the client cache for the previous version, e.g. P3495.
+      # The archive step then updates it to the latest version, e.g. P3496.
+      - name: Restore cached previous client files
         id: client-cache
         if: ${{ steps.check.outputs.endpoint != '' }}
         uses: actions/cache/restore@v4
         with:
           path: client
-          key: client-${{ runner.os }}-P${{ steps.check.outputs.version }}
-          restore-keys: |
-            client-${{ runner.os }}-
+          key: client-${{ runner.os }}-P${{ steps.check.outputs.previousVersion }}
 
       - name: Start client archiving
         id: archive
@@ -69,9 +69,12 @@ jobs:
         env:
           CLIENT_ARCHIVE_URL: ${{ secrets.CLIENT_ARCHIVE_URL }}
 
-      - name: Save client files to cache
-        if: ${{ steps.check.outputs.endpoint != '' && steps.archive.outputs.noClientCache != 'true' && steps.client-cache.outputs.cache-hit != 'true' }}
+      # Save the updated client as the latest version cache, e.g. P3496.
+      # Continue on error avoids failing a re-run when that version cache already exists.
+      - name: Save latest client files to cache
+        if: ${{ steps.check.outputs.endpoint != '' && steps.archive.outputs.noClientCache != 'true' }}
         uses: actions/cache/save@v4
+        continue-on-error: true
         with:
           path: client
           key: client-${{ runner.os }}-P${{ steps.check.outputs.version }}
