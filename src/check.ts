@@ -8,18 +8,20 @@ import type { KartPatchServerInfo } from './lib/kart-patch'
 
 const run = async () => {
   const t0 = performance.now()
+
   const getPerformanceResult = () => {
     const t1 = performance.now()
     return ((t1 - t0) / 1000).toFixed(2)
   }
+
   try {
     consola.box(`PopKart Client archiver v${packageJson.version}`)
 
     consola.start('Loading patch info...')
     const tcgServerEndpoint = process.env.PATCH_SERVER_ENDPOINT
     const kartPatch = new KartPatch()
-
     let patchInfo: KartPatchServerInfo = null
+
     if (tcgServerEndpoint) {
       consola.info('Connecting to TCG server...')
       patchInfo = await kartPatch.connectTCGServer(tcgServerEndpoint)
@@ -27,17 +29,26 @@ const run = async () => {
       consola.info('Connecting to patch socket...')
       patchInfo = await kartPatch.connectSocket(server.host, server.port)
     }
+
     consola.success('Patch info loaded.\n', patchInfo)
 
     consola.start('Checking version...')
     if (meta.version && meta.version >= patchInfo.version) {
-      consola.info(`Client is up-to-date, nothing to do. Current version: ${meta.version}.`)
+      consola.info(`Client is up-to-date, nothing to do.
+Current version: ${meta.version}.`)
       return
     }
-    consola.success(`New version found, previous version: ${meta.version}, latest version: ${patchInfo.version}.`)
-    consola.info(`Run \`pnpm start-main --endpoint=${patchInfo.endpoint} --id=${patchInfo.id} --version=${patchInfo.version} --mode=${patchInfo.mode}\` to start the archiving process.`)
+
+    consola.success(
+      `New version found, previous version: ${meta.version}, latest version: ${patchInfo.version}.`,
+    )
+    consola.info(
+      `Run \`pnpm start-main --endpoint=${patchInfo.endpoint} --id=${patchInfo.id} --version=${patchInfo.version} --mode=${patchInfo.mode}\` to start the archiving process.`,
+    )
+
     setOutput('endpoint', patchInfo.endpoint)
     setOutput('id', patchInfo.id)
+    setOutput('previousVersion', meta.version)
     setOutput('version', patchInfo.version)
     setOutput('mode', patchInfo.mode)
   } catch (e) {
@@ -47,4 +58,5 @@ const run = async () => {
     consola.success(`Done in ${getPerformanceResult()}s.`)
   }
 }
+
 run()
