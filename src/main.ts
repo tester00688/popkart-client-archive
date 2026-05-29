@@ -23,6 +23,75 @@ import type { KartPatchFile, TcgPatchFile } from './lib/kart-files'
 
 type archiveType = 'patch' | 'full'
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+const getPositiveEnvNumber = (name: string, fallback: number) => {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value > 0
+    ? value
+    : fallback
+}
+
+const formatError = (error: unknown) => {
+  if (error instanceof Error) {
+    const code = 'code' in error
+      ? `, code: ${String((error as { code?: unknown }).code)}`
+      : ''
+    return `${error.name}: ${error.message}${code}`
+  }
+  return String(error)
+}
+
+const downloadFileWithRetry = async (
+  url: string,
+  destinationPath: string,
+  label: string,
+  options: any = {},
+) => {
+  const attempts = getPositiveEnvNumber('DOWNLOAD_RETRY_ATTEMPTS', 8)
+  const baseDelayMs = getPositiveEnvNumber('DOWNLOAD_RETRY_DELAY_MS', 5000)
+  const connections = getPositiveEnvNumber('DOWNLOAD_CONNECTIONS', 1)
+  const maxRetry = getPositiveEnvNumber('DOWNLOAD_MAX_RETRY', 10)
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      if (attempt > 1)
+        consola.info(`Retrying ${label} (${attempt}/${attempts})...`)
+
+      await rm(destinationPath, { force: true }).catch(() => {})
+
+      const downloader = new EasyDl(
+        url,
+        destinationPath,
+        {
+          connections,
+          maxRetry,
+          ...options,
+        },
+      )
+
+      await downloader.wait()
+      return
+    } catch (error) {
+      lastError = error
+      consola.warn(`Download failed: ${label} (${attempt}/${attempts})`)
+      consola.warn(formatError(error))
+
+      if (attempt < attempts) {
+        const delayMs = Math.min(baseDelayMs * attempt, 60000)
+        consola.info(`Waiting ${Math.round(delayMs / 1000)}s before retry...`)
+        await sleep(delayMs)
+      }
+    }
+  }
+
+  throw new Error(
+    `Failed to download ${label} after ${attempts} attempts. URL: ${url}. Last error: ${formatError(lastError)}`,
+  )
+}
+
+
 const run = async () => {
   const t0 = performance.now()
   const getPerformanceResult = () => {
@@ -123,20 +192,20 @@ const run = async () => {
       if (!clientArchiveUrl)
         throw new Error('Client archive URL not provided.')
       const clientArchivePath = resolve(rootDir, 'PopKart_Client.zip')
-      const downloader = new EasyDl(
+      await downloadFileWithRetry(
         clientArchiveUrl,
         clientArchivePath,
+        'full client archive',
         {
           existBehavior: 'overwrite',
         },
       )
-      await downloader.wait()
       consola.success('Full client downloaded.')
 
       consola.info('Extracing full client...')
       await extract(clientArchivePath, clientDir)
       consola.success('Full client extracted. The archiver will be re-run.')
-      run()
+      await run()
       return
     } else if (patchFileCount === 0) {
       consola.info('Nothing to download.')
@@ -169,15 +238,12 @@ const run = async () => {
         const localPath = localFile.getDownloadPath()
         await createDirectory(localPath)
 
-        const downloader = new EasyDl(
-          resolveUrl(localFile.getRawFilePath(), remoteBaseUrl),
+        const url = resolveUrl(localFile.getRawFilePath(), remoteBaseUrl)
+        await downloadFileWithRetry(
+          url,
           localPath,
-          {
-            connections: 8,
-            maxRetry: 5,
-          },
+          patchFile.path,
         )
-        await downloader.wait()
         clearStdoutLastLine()
       })
       consola.success(`Client files downloaded.`)
