@@ -5,17 +5,17 @@ on:
     tags:
       - 'v*'
   schedule:
-    # Every Thursday and Friday at 09:59, 10:59, 11:59, 17:59, and 19:59 (UTC+8 / Asia/Taipei)
+    # Asia/Taipei: Thu/Fri 09:59, 10:59, 11:59, 17:59, 19:59
     - cron: '59 9,10,11,17,19 * * 4,5'
       timezone: 'Asia/Taipei'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: client-archiving
   cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
   release:
@@ -47,12 +47,15 @@ jobs:
         env:
           PATCH_SERVER_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
 
-      - name: Restore or ping cached client files
+      - name: Restore cached client files
+        id: client-cache
+        if: ${{ steps.check.outputs.endpoint != '' }}
         uses: actions/cache/restore@v4
         with:
-          key: client
           path: client
-          lookup-only: ${{ steps.check.outputs.endpoint == '' }}
+          key: client-${{ runner.os }}-P${{ steps.check.outputs.version }}
+          restore-keys: |
+            client-${{ runner.os }}-
 
       - name: Start client archiving
         id: archive
@@ -67,11 +70,11 @@ jobs:
           CLIENT_ARCHIVE_URL: ${{ secrets.CLIENT_ARCHIVE_URL }}
 
       - name: Save client files to cache
-        if: ${{ steps.check.outputs.endpoint != '' && steps.archive.outputs.noClientCache != 'true' }}
+        if: ${{ steps.check.outputs.endpoint != '' && steps.archive.outputs.noClientCache != 'true' && steps.client-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
-          key: client
           path: client
+          key: client-${{ runner.os }}-P${{ steps.check.outputs.version }}
 
       - name: Commit meta.json and create a new tag
         if: ${{ steps.check.outputs.endpoint != '' }}
