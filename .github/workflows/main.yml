@@ -6,8 +6,7 @@ on:
       - 'v*'
   schedule:
     # Asia/Taipei: Thu/Fri 09:59, 10:59, 11:59, 17:59, 19:59
-    - cron: '59 9,10,11,17,19 * * 4,5'
-      timezone: 'Asia/Taipei'
+    - cron: '59 1,2,3,9,11 * * 4,5'
   workflow_dispatch:
 
 concurrency:
