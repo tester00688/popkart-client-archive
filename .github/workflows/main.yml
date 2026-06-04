@@ -1,26 +1,19 @@
 name: Client archiving
-
 on:
   push:
     tags:
       - 'v*'
-
   schedule:
-    # 每週四、五的 09:59 / 10:59 / 11:59 / 20:59 / 21:59 (CST)
     - cron: '59 1,2,3,13,14 * * 4,5'
-
   workflow_dispatch:
-
 jobs:
   release:
     runs-on: windows-latest
     strategy:
       matrix:
         node-version: [18.x]
-
     steps:
     - uses: actions/checkout@v4
-
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
       with:
@@ -31,23 +24,19 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'pnpm'
-
     - name: Install dependencies
       run: pnpm i
-
     - name: Check patch info
       id: check
       run: pnpm start-check
       env:
         PATCH_SERVER_ENDPOINT: ${{ secrets.PATCH_SERVER_ENDPOINT }}
-
     - name: Restore or ping cached client files
       uses: actions/cache/restore@v4
       with:
         key: client
         path: client
         lookup-only: ${{ steps.check.outputs.endpoint == null }}
-
     - name: Start client archiving
       id: archive
       if: ${{ steps.check.outputs.endpoint != null }}
@@ -59,14 +48,12 @@ jobs:
         --mode=${{ steps.check.outputs.mode }}
       env:
         CLIENT_ARCHIVE_URL: ${{ secrets.CLIENT_ARCHIVE_URL }}
-
     - name: Save client files to cache
       if: ${{ steps.check.outputs.endpoint != null && steps.archive.outputs.noClientCache != 'true'}}
       uses: actions/cache/save@v4
       with:
         key: client
         path: client
-
     - name: Commit meta.json and create a new tag
       if: ${{ steps.check.outputs.endpoint != null }}
       uses: stefanzweifel/git-auto-commit-action@v5
@@ -75,20 +62,17 @@ jobs:
         commit_message: 'chore: update meta.json'
         file_pattern: meta.json
         tagging_message: 'P${{ steps.check.outputs.version }}'
-
     - name: Expose current date
       if: ${{ steps.check.outputs.endpoint != null }}
       uses: Kaven-Universe/github-action-current-date-time@v1
       id: date
       with:
         format: 'YYYY-MM-DD'
-
     - name: Create release note
       if: ${{ steps.check.outputs.endpoint != null }}
       run: |
         echo "Release date: ${{ steps.date.outputs.time }}" > release-note.md
         echo "Instructions: https://kinf.cc/Gz6ni" >> release-note.md
-
     - name: Create release
       if: ${{ steps.check.outputs.endpoint != null }}
       uses: ncipollo/release-action@v1
